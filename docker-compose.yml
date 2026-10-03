@@ -1,0 +1,24 @@
+# One command to run everything:  JWT_SECRET=$(openssl rand -hex 32) docker compose up --build
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    ports:
+      - "5000:5000"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/pocketsmart
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET to a random string of 32+ characters}
+      # This compose file serves plain HTTP on localhost. Behind an HTTPS proxy, remove this line
+      # so session cookies are marked Secure.
+      COOKIE_SECURE: "false"
+
+volumes:
+  mongo-data:
