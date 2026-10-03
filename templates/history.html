@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>History — PocketSmart AI</title>
+  {% include "_head.html" %}
+</head>
+<body>
+  {% include "_navbar_app.html" %}
+
+  <section class="dashboard-hero navy-gradient">
+    <h1>Your Recommendation History</h1>
+    <p>View and manage all your previous budget plans and recommendations</p>
+  </section>
+
+  <section class="section">
+    <h2>Recent Recommendations</h2>
+    <div class="history-grid" id="historyGrid">
+      <div class="empty-state">Loading...</div>
+    </div>
+  </section>
+
+  <script src="/static/js/app.js"></script>
+  <script>
+    const typeIcons = { home: "fa-couch", party: "fa-champagne-glasses", jewelry: "fa-gem" };
+    const typeTitles = { home: "Home Interior Plan", party: "Party Plan", jewelry: "Jewelry Plan" };
+
+    function detailLines(item) {
+      const input = item.input || {};
+      if (item.type === "home") {
+        const rooms = [input.has_living_room && "Living Room", input.has_kitchen && "Kitchen", input.has_bedroom && "Bedroom"].filter(Boolean).join(", ");
+        return `<div>Rooms: ${rooms || "N/A"}</div><div>Lights: ${input.num_lights ?? "-"} · Fans: ${input.num_fans ?? "-"} · Furniture: ${input.num_furniture ?? "-"}</div>`;
+      }
+      if (item.type === "party") {
+        const needs = [input.needs_catering && "Catering", input.needs_decoration && "Decoration", input.needs_entertainment && "Entertainment"].filter(Boolean);
+        return `<div>Party Type: ${input.party_type || "N/A"} · Guests: ${input.num_guests ?? "-"}</div>
+          <div class="chip-row">${needs.map(n => `<span class="chip">${n}</span>`).join("") || "<span class='chip'>No extras</span>"}</div>`;
+      }
+      if (item.type === "jewelry") {
+        return `<div>Occasion: ${input.occasion || "N/A"}</div><div>${input.image ? "With outfit image" : "Text-only"}</div>`;
+      }
+      return "";
+    }
+
+    async function loadHistory() {
+      const grid = document.getElementById("historyGrid");
+      try {
+        const data = await apiRequest("/recommendation-history");
+        if (!data.history.length) {
+          grid.innerHTML = '<div class="empty-state">No recommendations yet. Try a planner from the dashboard!</div>';
+          return;
+        }
+        grid.innerHTML = data.history.map(item => `
+          <div class="card history-card type-${item.type}">
+            <div class="type-date">
+              <span><i class="fa-solid ${typeIcons[item.type] || 'fa-wallet'}"></i> ${typeTitles[item.type] || item.type}</span>
+              <span>${new Date(item.timestamp).toLocaleString('en-IN')}</span>
+            </div>
+            <div><strong>Total Budget:</strong> ${formatINR(item.summary.total_budget)}</div>
+            <div><strong>Remaining:</strong> ${formatINR(item.summary.remaining_budget)}</div>
+            ${fallbackBannerHtml(item.summary)}
+            ${detailLines(item)}
+            <button class="btn btn-outline btn-sm" style="margin-top:0.8rem;" onclick="toggleDetail('${item.id}', this)">View Full Details</button>
+            <div class="detail-full" id="detail-${item.id}"></div>
+          </div>
+        `).join("");
+      } catch (err) {
+        grid.innerHTML = '<div class="empty-state">Could not load history.</div>';
+      }
+    }
+
+    async function toggleDetail(id, btn) {
+      const el = document.getElementById(`detail-${id}`);
+      if (el.style.display === "block") {
+        el.style.display = "none";
+        btn.textContent = "View Full Details";
+        return;
+      }
+      btn.textContent = "Loading...";
+      try {
+        const data = await apiRequest(`/recommendation-details/${id}`);
+        el.innerHTML = `<pre style="white-space:pre-wrap;font-size:0.8rem;background:var(--paper-bg);padding:0.8rem;border-radius:8px;">${JSON.stringify(data.full_result, null, 2)}</pre>`;
+        el.style.display = "block";
+        btn.textContent = "Hide Details";
+      } catch (err) {
+        btn.textContent = "View Full Details";
+      }
+    }
+
+    loadHistory();
+  </script>
+</body>
+</html>

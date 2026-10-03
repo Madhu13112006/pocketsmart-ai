@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Party Planner — PocketSmart AI</title>
+  {% include "_head.html" %}
+</head>
+<body>
+  {% include "_navbar_app.html" %}
+
+  <section class="page-header navy-gradient">
+    <h1><i class="fa-solid fa-champagne-glasses"></i> Party Budget Planner</h1>
+    <p>Plan your perfect event with AI-powered budget recommendations</p>
+  </section>
+
+  <div class="planner-form">
+    <div class="card">
+      <div class="error-banner" id="errorBanner"></div>
+      <form id="partyForm">
+        <div class="form-section">
+          <h3><i class="fa-solid fa-indian-rupee-sign"></i> Basic Information</h3>
+          <div class="grid-2x2">
+            <div class="form-group">
+              <label for="total_budget">Total Budget (₹)</label>
+              <input type="number" id="total_budget" min="1" step="0.01" required>
+            </div>
+            <div class="form-group">
+              <label for="num_guests">Number of Guests</label>
+              <input type="number" id="num_guests" min="1" value="1" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3><i class="fa-solid fa-calendar-star"></i> Event Details</h3>
+          <div class="grid-2x2">
+            <div class="form-group">
+              <label for="party_type">Party Type</label>
+              <select id="party_type">
+                <option value="Birthday">Birthday</option>
+                <option value="Corporate">Corporate</option>
+                <option value="Wedding">Wedding</option>
+                <option value="Anniversary">Anniversary</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="venue_type">Venue Type</label>
+              <input type="text" id="venue_type" placeholder="e.g. Home, Banquet Hall, Rooftop">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3><i class="fa-solid fa-list-check"></i> Party Needs</h3>
+          <div class="toggle-tiles">
+            <div class="toggle-tile" data-target="needs_catering">
+              <i class="fa-solid fa-utensils"></i> Catering
+            </div>
+            <div class="toggle-tile" data-target="needs_decoration">
+              <i class="fa-solid fa-paintbrush"></i> Decoration
+            </div>
+            <div class="toggle-tile" data-target="needs_entertainment">
+              <i class="fa-solid fa-music"></i> Entertainment
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3><i class="fa-solid fa-pen"></i> Additional Requirements</h3>
+          <textarea id="additional_requirements" rows="3" placeholder="e.g. theme, dietary needs, preferred vendors..."></textarea>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Generate Budget Plan</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="loading-spinner" id="loadingSpinner"><i class="fa-solid fa-spinner"></i><p>Generating your party budget plan...</p></div>
+  </div>
+
+  <div class="results-wrap" id="resultsWrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2>Your Party Budget Plan</h2>
+      <button class="btn btn-outline btn-sm no-print" onclick="window.print()"><i class="fa-solid fa-print"></i> Print / Save</button>
+    </div>
+    <div id="fallbackBanner"></div>
+    <p><strong>Budget: <span id="budgetHeadline"></span></strong></p>
+
+    <div id="categoriesContainer"></div>
+
+    <div class="totals-strip">
+      <div><div class="label">Total Budget</div><div class="figure" id="totalBudget"></div></div>
+      <div><div class="label">Allocated</div><div class="figure" id="totalAllocated"></div></div>
+      <div><div class="label">Remaining</div><div class="figure" id="totalRemaining"></div></div>
+    </div>
+
+    <div class="card" id="venueCard" style="display:none;">
+      <h3><i class="fa-solid fa-map-location-dot"></i> Venue Suggestions</h3>
+      <div id="venueList"></div>
+    </div>
+
+    <div class="card" id="suggestionsCard" style="display:none;">
+      <h3><i class="fa-solid fa-lightbulb"></i> Additional Suggestions</h3>
+      <ul class="suggestion-list" id="suggestionsList"></ul>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script>
+    document.querySelectorAll(".toggle-tile").forEach(tile => {
+      tile.addEventListener("click", () => tile.classList.toggle("active"));
+    });
+
+    document.getElementById("partyForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorBanner = document.getElementById("errorBanner");
+      const spinner = document.getElementById("loadingSpinner");
+      const resultsWrap = document.getElementById("resultsWrap");
+      hideBanner(errorBanner);
+      resultsWrap.style.display = "none";
+      setLoading(spinner, true);
+
+      const isActive = (target) => document.querySelector(`.toggle-tile[data-target="${target}"]`).classList.contains("active");
+
+      const payload = {
+        total_budget: parseFloat(document.getElementById("total_budget").value),
+        num_guests: parseInt(document.getElementById("num_guests").value),
+        party_type: document.getElementById("party_type").value,
+        venue_type: document.getElementById("venue_type").value || null,
+        needs_catering: isActive("needs_catering"),
+        needs_decoration: isActive("needs_decoration"),
+        needs_entertainment: isActive("needs_entertainment"),
+        additional_requirements: document.getElementById("additional_requirements").value || null,
+      };
+
+      try {
+        const result = await apiRequest("/party-budget", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        renderResults(result);
+      } catch (err) {
+        showBanner(errorBanner, err.message);
+      } finally {
+        setLoading(spinner, false);
+      }
+    });
+
+    function renderResults(result) {
+      document.getElementById("fallbackBanner").innerHTML = fallbackBannerHtml(result);
+      document.getElementById("budgetHeadline").textContent = formatINR(result.total_budget);
+      document.getElementById("totalBudget").textContent = formatINR(result.total_budget);
+
+      const calc = result.calculation_table_inr || [];
+      const allocated = calc.reduce((sum, c) => sum + (c.total_cost || 0), 0);
+      document.getElementById("totalAllocated").textContent = formatINR(allocated);
+      document.getElementById("totalRemaining").textContent = formatINR(result.remaining_budget);
+
+      const container = document.getElementById("categoriesContainer");
+      container.innerHTML = (result.budget_breakdown || []).map(cat => `
+        <div class="card category-card">
+          <div class="cat-head">
+            <div class="left"><i class="fa-solid fa-tag"></i> ${cat.category}</div>
+            <div>${formatINR(cat.allocation)}</div>
+          </div>
+          ${(cat.items || []).map(item => `
+            <div style="padding:0.6rem 0;border-bottom:1px solid var(--border-soft);">
+              <strong>${item.name}</strong> — ${formatINR(item.estimated_price)}
+              <div style="color:var(--text-muted);font-size:0.85rem;">${item.description || ""}</div>
+              ${item.shopping_links ? `<div style="margin-top:0.4rem;">Shop on: ${shoppingLinksHtml(item.shopping_links)}</div>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      `).join("");
+
+      const venues = result.venue_suggestions || [];
+      const venueCard = document.getElementById("venueCard");
+      if (venues.length) {
+        document.getElementById("venueList").innerHTML = venues.map(v => `
+          <div style="padding:0.8rem 0;border-bottom:1px solid var(--border-soft);">
+            <strong>${v.name}</strong> (${v.type || "Venue"}) — Capacity: ${v.capacity || "N/A"}, Est. ${formatINR(v.estimated_cost)}
+            <div style="margin-top:0.4rem;">${shoppingLinksHtml(v.search_links)}</div>
+          </div>
+        `).join("");
+        venueCard.style.display = "block";
+      } else {
+        venueCard.style.display = "none";
+      }
+
+      const suggestions = result.additional_suggestions || [];
+      const suggestionsCard = document.getElementById("suggestionsCard");
+      if (suggestions.length) {
+        document.getElementById("suggestionsList").innerHTML = suggestions.map(s => `<li><i class="fa-solid fa-circle-check"></i> ${s}</li>`).join("");
+        suggestionsCard.style.display = "block";
+      } else {
+        suggestionsCard.style.display = "none";
+      }
+
+      document.getElementById("resultsWrap").style.display = "block";
+      document.getElementById("resultsWrap").scrollIntoView({ behavior: "smooth" });
+    }
+  </script>
+</body>
+</html>

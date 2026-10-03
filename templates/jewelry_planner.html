@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Jewelry Planner — PocketSmart AI</title>
+  {% include "_head.html" %}
+</head>
+<body>
+  {% include "_navbar_app.html" %}
+
+  <section class="page-header navy-gradient">
+    <h1><i class="fa-solid fa-gem"></i> Jewelry Budget Planner</h1>
+    <p>Get AI-powered jewelry recommendations within your budget for any occasion</p>
+  </section>
+
+  <div class="planner-form">
+    <div class="card">
+      <div class="error-banner" id="errorBanner"></div>
+      <form id="jewelryForm">
+        <div class="form-section">
+          <h3><i class="fa-solid fa-indian-rupee-sign"></i> Budget Details</h3>
+          <div class="form-group">
+            <label for="total_budget">Total Budget (₹)</label>
+            <input type="number" id="total_budget" min="1" step="0.01" required>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3><i class="fa-solid fa-calendar-star"></i> Occasion &amp; Preferences</h3>
+          <div class="form-group">
+            <label for="occasion">Occasion</label>
+            <input type="text" id="occasion" placeholder="e.g. Birthday, Wedding, Festival" required>
+          </div>
+          <div class="form-group">
+            <label for="preferences">Style Preferences</label>
+            <textarea id="preferences" rows="2" placeholder="e.g. gold tone, minimal, traditional..."></textarea>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h3><i class="fa-solid fa-image"></i> Upload Outfit Image</h3>
+          <div class="upload-dropzone" id="dropzone">
+            <i class="fa-solid fa-cloud-arrow-up" style="font-size:1.8rem;"></i>
+            <p>Drag &amp; drop an image here, or click to browse</p>
+            <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp" style="display:none;">
+          </div>
+          <img id="imagePreview" class="upload-preview" style="display:none;">
+          <div>
+            <button type="button" class="btn btn-outline btn-sm" id="removeImageBtn" style="display:none;margin-top:0.6rem;">Remove Image</button>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Get Recommendations</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="loading-spinner" id="loadingSpinner"><i class="fa-solid fa-spinner"></i><p>Analyzing your style and generating recommendations...</p></div>
+  </div>
+
+  <div class="results-wrap" id="resultsWrap">
+    <h2>Your Personalized Jewelry Recommendations</h2>
+    <div id="fallbackBanner"></div>
+    <div class="budget-summary-bar navy-gradient">
+      <div><div class="figure" id="sumTotal">₹0</div><div class="label">Total Budget</div></div>
+      <div><div class="figure remaining" id="sumRemaining">₹0</div><div class="label">Remaining Budget</div></div>
+    </div>
+
+    <div class="card" id="outfitCard" style="display:none;">
+      <h3><i class="fa-solid fa-shirt"></i> Outfit Analysis</h3>
+      <div style="margin-bottom:0.6rem;"><strong>Colors:</strong> <span class="chip-row" id="outfitColors"></span></div>
+      <div><strong>Style:</strong> <span class="chip" id="outfitStyle"></span> &nbsp; <strong>Formality:</strong> <span class="chip" id="outfitFormality"></span></div>
+    </div>
+
+    <div class="card">
+      <h3><i class="fa-solid fa-gem"></i> Jewelry Recommendations</h3>
+      <div id="jewelryItems"></div>
+    </div>
+
+    <div class="card" id="tipsCard" style="display:none;">
+      <h3><i class="fa-solid fa-lightbulb"></i> Styling Tips</h3>
+      <ul class="suggestion-list" id="tipsList"></ul>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script>
+    const dropzone = document.getElementById("dropzone");
+    const imageInput = document.getElementById("imageInput");
+    const imagePreview = document.getElementById("imagePreview");
+    const removeImageBtn = document.getElementById("removeImageBtn");
+    let selectedFile = null;
+
+    dropzone.addEventListener("click", () => imageInput.click());
+    dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    imageInput.addEventListener("change", (e) => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    function handleFile(file) {
+      selectedFile = file;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        imagePreview.src = e.target.result;
+        imagePreview.style.display = "block";
+        removeImageBtn.style.display = "inline-block";
+      };
+      reader.readAsDataURL(file);
+    }
+
+    removeImageBtn.addEventListener("click", () => {
+      selectedFile = null;
+      imageInput.value = "";
+      imagePreview.style.display = "none";
+      removeImageBtn.style.display = "none";
+    });
+
+    document.getElementById("jewelryForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorBanner = document.getElementById("errorBanner");
+      const spinner = document.getElementById("loadingSpinner");
+      const resultsWrap = document.getElementById("resultsWrap");
+      hideBanner(errorBanner);
+      resultsWrap.style.display = "none";
+      setLoading(spinner, true);
+
+      const formData = new FormData();
+      formData.append("total_budget", document.getElementById("total_budget").value);
+      formData.append("occasion", document.getElementById("occasion").value);
+      formData.append("preferences", document.getElementById("preferences").value || "");
+      if (selectedFile) formData.append("image", selectedFile);
+
+      try {
+        const response = await fetch("/jewelry-budget", { method: "POST", body: formData, credentials: "include" });
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(data.detail || "Could not generate jewelry recommendations.");
+        }
+        const result = await response.json();
+        renderResults(result);
+      } catch (err) {
+        showBanner(errorBanner, err.message);
+      } finally {
+        setLoading(spinner, false);
+      }
+    });
+
+    function renderResults(result) {
+      document.getElementById("fallbackBanner").innerHTML = fallbackBannerHtml(result);
+      document.getElementById("sumTotal").textContent = formatINR(result.total_budget);
+      document.getElementById("sumRemaining").textContent = formatINR(result.remaining_budget);
+
+      const outfitCard = document.getElementById("outfitCard");
+      if (result.outfit_analysis) {
+        const oa = result.outfit_analysis;
+        document.getElementById("outfitColors").innerHTML = (oa.colors || []).map(c => `<span class="chip">${c}</span>`).join("") || "<span class='chip'>N/A</span>";
+        document.getElementById("outfitStyle").textContent = oa.style || "N/A";
+        document.getElementById("outfitFormality").textContent = oa.formality || "N/A";
+        outfitCard.style.display = "block";
+      } else {
+        outfitCard.style.display = "none";
+      }
+
+      const platformLabels = { amazon: "Amazon", flipkart: "Flipkart", bluestone: "BlueStone", tanishq: "Tanishq", caratlane: "CaratLane", melorra: "Melorra", meesho: "Meesho" };
+      document.getElementById("jewelryItems").innerHTML = (result.jewelry_recommendations || []).map(item => `
+        <div class="jewelry-item-row">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+            <div><strong>${item.item_type}</strong> &mdash; ${item.style || ""}</div>
+            <span class="price-pill">${formatINR(item.estimated_price)}</span>
+          </div>
+          <div style="color:var(--text-muted);font-size:0.9rem;margin:0.4rem 0;">${item.description || ""}</div>
+          <div><span style="font-size:0.85rem;">🛒 Shop For This:</span> ${shoppingLinksHtml(item.shopping_links)}</div>
+        </div>
+      `).join("");
+
+      const tips = result.styling_tips || [];
+      const tipsCard = document.getElementById("tipsCard");
+      if (tips.length) {
+        document.getElementById("tipsList").innerHTML = tips.map(t => `<li><i class="fa-solid fa-circle-check"></i> ${t}</li>`).join("");
+        tipsCard.style.display = "block";
+      } else {
+        tipsCard.style.display = "none";
+      }
+
+      document.getElementById("resultsWrap").style.display = "block";
+      document.getElementById("resultsWrap").scrollIntoView({ behavior: "smooth" });
+    }
+  </script>
+</body>
+</html>

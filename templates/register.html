@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Create Account — PocketSmart AI</title>
+  {% include "_head.html" %}
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-card">
+      <div class="auth-brand"><i class="fa-solid fa-wallet"></i> PocketSmart</div>
+      <div class="auth-tagline">AI-Powered Budget Planning</div>
+      <h2>Create Your Account</h2>
+
+      <div class="error-banner" id="errorBanner"></div>
+      <div class="success-banner" id="successBanner"></div>
+
+      <form id="registerForm">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <div class="input-icon-wrap">
+            <i class="fa-solid fa-user"></i>
+            <input type="text" id="username" name="username" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <div class="input-icon-wrap">
+            <i class="fa-solid fa-envelope"></i>
+            <input type="email" id="email" name="email" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-icon-wrap">
+            <i class="fa-solid fa-lock"></i>
+            <input type="password" id="password" name="password" required>
+          </div>
+          <div class="password-strength"><div class="password-strength-bar" id="strengthBar"></div></div>
+        </div>
+        <div class="form-group">
+          <label for="confirmPassword">Confirm Password</label>
+          <div class="input-icon-wrap">
+            <i class="fa-solid fa-lock"></i>
+            <input type="password" id="confirmPassword" name="confirmPassword" required>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary auth-submit">Create Account</button>
+      </form>
+
+      <div class="auth-footer-link">Already have an account? <a href="/login" style="color:var(--navy-light);font-weight:600;">Sign In</a></div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script>
+    const strengthBar = document.getElementById("strengthBar");
+    document.getElementById("password").addEventListener("input", (e) => {
+      const val = e.target.value;
+      let score = 0;
+      if (val.length >= 6) score += 1;
+      if (val.length >= 10) score += 1;
+      if (/[0-9]/.test(val)) score += 1;
+      if (/[^A-Za-z0-9]/.test(val)) score += 1;
+      const pct = (score / 4) * 100;
+      const colors = ["#d33f49", "#d33f49", "#f0a500", "#1c9a5b", "#1c9a5b"];
+      strengthBar.style.width = pct + "%";
+      strengthBar.style.background = colors[score];
+    });
+
+    document.getElementById("registerForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errorBanner = document.getElementById("errorBanner");
+      const successBanner = document.getElementById("successBanner");
+      hideBanner(errorBanner);
+      hideBanner(successBanner);
+
+      const password = document.getElementById("password").value;
+      const confirmPassword = document.getElementById("confirmPassword").value;
+      if (password !== confirmPassword) {
+        showBanner(errorBanner, "Passwords do not match.");
+        return;
+      }
+
+      const payload = {
+        username: document.getElementById("username").value,
+        email: document.getElementById("email").value,
+        password: password,
+      };
+
+      try {
+        await apiRequest("/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        showBanner(successBanner, "Account created! Redirecting to sign in...");
+        setTimeout(() => (window.location.href = "/login"), 1200);
+      } catch (err) {
+        showBanner(errorBanner, err.message);
+      }
+    });
+  </script>
+</body>
+</html>

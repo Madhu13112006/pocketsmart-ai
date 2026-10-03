@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Dashboard — PocketSmart AI</title>
+  {% include "_head.html" %}
+</head>
+<body>
+  {% include "_navbar_app.html" %}
+
+  <section class="dashboard-hero navy-gradient">
+    <h1>Welcome, {{ user.username }}!</h1>
+    <p>Pick a planner below to get AI-powered budget recommendations.</p>
+  </section>
+
+  <section class="section">
+    <div class="card-grid">
+      <div class="card planner-card">
+        <div class="planner-image home"><i class="fa-solid fa-couch"></i></div>
+        <h3>Home Interior Planner</h3>
+        <p>Budget-smart lighting, fans, and furniture for your home.</p>
+        <a href="/home-planner" class="btn btn-primary">Get Started</a>
+      </div>
+      <div class="card planner-card">
+        <div class="planner-image party"><i class="fa-solid fa-champagne-glasses"></i></div>
+        <h3>Party Planner</h3>
+        <p>Venue, catering, decoration and entertainment, all balanced.</p>
+        <a href="/party-planner" class="btn btn-primary">Get Started</a>
+      </div>
+      <div class="card planner-card">
+        <div class="planner-image jewelry"><i class="fa-solid fa-gem"></i></div>
+        <h3>Jewelry Planner</h3>
+        <p>Upload your outfit and get matching jewelry recommendations.</p>
+        <a href="/jewelry-planner" class="btn btn-primary">Get Started</a>
+      </div>
+    </div>
+
+    <div class="history-cta">
+      <a href="/history" class="btn btn-gold"><i class="fa-solid fa-clock-rotate-left"></i> View All Recommendation History</a>
+    </div>
+
+    <div class="card">
+      <h3><i class="fa-solid fa-chart-line"></i> Recent Activity</h3>
+      <div id="recentActivity">
+        <div class="empty-state">Loading...</div>
+      </div>
+    </div>
+  </section>
+
+  <script src="/static/js/app.js"></script>
+  <script>
+    const typeIcons = { home: "fa-couch", party: "fa-champagne-glasses", jewelry: "fa-gem" };
+    const typeTitles = { home: "Home Interior Plan", party: "Party Plan", jewelry: "Jewelry Plan" };
+
+    async function loadRecentActivity() {
+      const container = document.getElementById("recentActivity");
+      try {
+        const data = await apiRequest("/recommendation-history");
+        const items = data.history.slice(0, 5);
+        if (items.length === 0) {
+          container.innerHTML = '<div class="empty-state">No recommendations yet. Try a planner above!</div>';
+          return;
+        }
+        container.innerHTML = items.map(item => `
+          <div class="activity-item">
+            <div class="activity-icon"><i class="fa-solid ${typeIcons[item.type] || 'fa-wallet'}"></i></div>
+            <div>
+              <div><strong>${typeTitles[item.type] || item.type}</strong></div>
+              <div class="meta">Budget: ${formatINR(item.summary.total_budget)} — Created on ${new Date(item.timestamp).toLocaleDateString('en-IN')}</div>
+            </div>
+          </div>
+        `).join("");
+      } catch (err) {
+        container.innerHTML = '<div class="empty-state">Could not load recent activity.</div>';
+      }
+    }
+    loadRecentActivity();
+  </script>
+</body>
+</html>
